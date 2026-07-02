@@ -1,21 +1,38 @@
-# Routes
+# Routes AppPublisher
 
-TanStack Start uses **file-based routing**. Every `.tsx` file in this directory
-defines a route. Do **not** create `src/pages/`, `src/routes/_app/index.tsx`, or
-`app/layout.tsx` — those are Next.js / Remix conventions. The only root layout
-is `src/routes/__root.tsx`.
+Convention TanStack Router : un fichier `*.tsx` = une route. La chaîne dans
+`createFileRoute("/...")` doit correspondre exactement au nom du fichier.
 
-## Conventions
+## Carte des routes (Phase 1)
 
-| File | URL |
-| --- | --- |
-| `index.tsx` | `/` |
-| `about.tsx` | `/about` |
-| `users/index.tsx` | `/users` |
-| `users/$id.tsx` | `/users/:id` (dynamic — bare `$`, no curly braces) |
-| `posts/{-$category}.tsx` | `/posts/:category?` (optional segment) |
-| `files/$.tsx` | `/files/*` (splat — read via `_splat` param, never `*`) |
-| `_layout.tsx` | layout route (renders children via `<Outlet />`) |
-| `__root.tsx` | app shell — wraps every page; preserve `<Outlet />` |
+| Fichier             | URL           | Rôle                                    |
+| ------------------- | ------------- | --------------------------------------- |
+| `__root.tsx`        | layout        | Sidebar, thème, providers               |
+| `index.tsx`         | `/`           | Tableau de bord                         |
+| `setup.tsx`         | `/setup`      | Assistant de première configuration     |
+| `projects.tsx`      | `/projects`   | Liste et gestion des projets            |
+| `version.tsx`       | `/version`    | Assistant de versionning                |
+| `build.tsx`         | `/build`      | Assistant de construction Android       |
+| `publish.tsx`       | `/publish`    | Checklist de publication (Phase 4)      |
+| `diagnostic.tsx`    | `/diagnostic` | Santé du projet                         |
+| `history.tsx`       | `/history`    | Historique des publications             |
+| `settings.tsx`      | `/settings`   | Paramètres                              |
+| `journal.tsx`       | `/journal`    | Journal technique caché (support only)  |
 
-`routeTree.gen.ts` is auto-generated. Don't edit it by hand.
+## Architecture modulaire
+
+- `src/core/*` : logique métier, contrats et services (`storage`, `projects`,
+  `version`, `diagnostic`, `workflow`, `history`, `journal`, `errors`,
+  `settings`, `store`). Chaque module est indépendant et remplaçable.
+- `src/components/*` : composants UI transverses (sidebar, workflow-view,
+  status-dot, contextual-help, mode-badge, theme-provider, page-header).
+- `src/routes/*` : uniquement de la composition. Aucune logique métier ici.
+
+## Phases suivantes
+
+- **Phase 2** : brancher les services `projects`, `version`, `build` sur des
+  appels IPC Electron. Les interfaces publiques ne changent pas.
+- **Phase 3** : GitHub via un nouveau module `src/core/github`.
+- **Phase 4** : Google Play via un nouveau module `src/core/playstore` et
+  activation de `publish.tsx`.
+- **Phase 5** : iOS + plugins, via un module `src/core/plugins`.
