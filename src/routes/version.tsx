@@ -92,7 +92,9 @@ function VersionAssistant() {
         await BackupService.create(project, "version");
       }
 
-      let applied: { version: string; build: number } | null = null;
+      const appliedRef: { current: { version: string; build: number } | null } = {
+        current: null,
+      };
 
       const wf = await runWorkflow({
         id: "version",
@@ -109,7 +111,7 @@ function VersionAssistant() {
             title: "Application de la nouvelle version",
             run: async () => {
               try {
-                applied = await VersionService.apply(project, choice!);
+                appliedRef.current = await VersionService.apply(project, choice!);
                 return { status: "success" };
               } catch (e) {
                 return {
@@ -135,8 +137,8 @@ function VersionAssistant() {
         return;
       }
 
-      const finalVersion = applied?.version ?? preview.to;
-      const finalBuild = applied?.build ?? preview.newBuild;
+      const finalVersion = appliedRef.current?.version ?? preview.to;
+      const finalBuild = appliedRef.current?.build ?? preview.newBuild;
 
       if (choice !== "readonly") {
         ProjectsService.update(project.id, {
