@@ -92,9 +92,8 @@ function VersionAssistant() {
         await BackupService.create(project, "version");
       }
 
-      let applied: { version: string; build: number } | null = null;
-      const setApplied = (v: { version: string; build: number }) => {
-        applied = v;
+      const appliedRef: { current: { version: string; build: number } | null } = {
+        current: null,
       };
 
       const wf = await runWorkflow({
