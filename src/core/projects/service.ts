@@ -63,7 +63,16 @@ export const ProjectsService = {
    */
   async detectFromPath(path: string): Promise<ProjectDraft> {
     JournalService.log("command", "detect", { path });
-    const detected = await bridge().projects.detect(path);
+    const detected = (await bridge().projects.detect(path)) ?? {
+      hasPackageJson: false,
+      hasVersionJson: false,
+      hasCapacitorConfig: false,
+      hasAndroid: false,
+      hasIos: false,
+      hasVersionScript: false,
+      hasGradleWrapper: false,
+      hasChangelog: false,
+    };
     return {
       name: detected.packageName || inferName(path),
       logoEmoji: "📱",
@@ -78,6 +87,7 @@ export const ProjectsService = {
         hasCapacitorConfig: detected.hasCapacitorConfig,
         hasVersionScript: detected.hasVersionScript,
         hasGradleWrapper: detected.hasGradleWrapper,
+        hasChangelog: detected.hasChangelog,
       },
     };
   },
@@ -104,6 +114,7 @@ export const ProjectsService = {
         hasCapacitorConfig: sp.detected.hasCapacitorConfig,
         hasVersionScript: sp.detected.hasVersionScript,
         hasGradleWrapper: sp.detected.hasGradleWrapper,
+        hasChangelog: sp.detected.hasChangelog,
       },
     });
   },

@@ -131,6 +131,16 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  // Phase 3 — au démarrage sous Electron, on ré-enregistre les racines des
+  // projets connus afin que le confinement fs:* autorise leur lecture.
+  useEffect(() => {
+    void (async () => {
+      const { bridge } = await import("@/core/bridge");
+      const { ProjectsService } = await import("@/core/projects/service");
+      const roots = ProjectsService.list().map((p) => p.localPath);
+      if (roots.length) await bridge().projects.registerRoots(roots);
+    })();
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
