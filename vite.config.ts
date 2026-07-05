@@ -29,6 +29,7 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  nitro: false,
   vite: {
     base: "./",
     define: {
