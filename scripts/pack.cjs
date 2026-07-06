@@ -25,6 +25,7 @@ if (!["mac", "win"].includes(target)) {
 const root = path.resolve(__dirname, "..");
 const distApp = path.join(root, "dist-app");
 const buildDir = path.join(root, "build");
+const dist = path.join(root, "dist");
 
 const start = Date.now();
 const info = (m) => console.log(`\x1b[36m•\x1b[0m ${m}`);
@@ -38,6 +39,35 @@ const fail = (m) => {
 function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { stdio: "inherit", cwd: root, ...opts });
   if (r.status !== 0) fail(`Commande échouée : ${cmd} ${args.join(" ")}`);
+}
+
+/**
+ * Diagnostic : affiche la structure complète de dist/ en cas d'erreur.
+ * Aide à comprendre pourquoi dist/index.html manque.
+ */
+function dumpDistStructure() {
+  if (!fs.existsSync(dist)) {
+    console.error(`\n  [DIAG] dist/ n'existe pas.`);
+    return;
+  }
+  console.error(`\n  [DIAG] Contenu de dist/ :`);
+  function walk(dir, prefix = "    ") {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const fullPath = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          console.error(`${prefix}📁 ${e.name}/`);
+          walk(fullPath, prefix + "  ");
+        } else {
+          const st = fs.statSync(fullPath);
+          const size = st.size > 1024 * 100 ? `${(st.size / 1024 / 1024).toFixed(1)}M` : `${(st.size / 1024).toFixed(1)}K`;
+          console.error(`${prefix}📄 ${e.name} (${size})`);
+        }
+      }
+    } catch {}
+  }
+  walk(dist);
 }
 
 /* ---------- 1. Vérifications ---------- */
@@ -72,12 +102,16 @@ info("Nettoyage du dossier de sortie…");
 if (fs.existsSync(distApp)) {
   fs.rmSync(distApp, { recursive: true, force: true });
 }
-ok(`dist-app/ nettoyé.`);
+if (fs.existsSync(dist)) {
+  fs.rmSync(dist, { recursive: true, force: true });
+}
+ok(`dist/ et dist-app/ nettoyés.`);
 
 /* ---------- 4. Build Vite ---------- */
 info("Compilation de l'interface (vite build — config Electron SPA)…");
 run("npx", ["vite", "build", "--config", "vite.electron.config.ts"]);
 if (!fs.existsSync(path.join(root, "dist", "index.html"))) {
+  dumpDistStructure();
   fail("dist/index.html non produit — la compilation a échoué.");
 }
 ok("Interface compilée.");
