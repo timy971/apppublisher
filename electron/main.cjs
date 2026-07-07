@@ -217,7 +217,85 @@ function resolveWithinAllowed(inputPath) {
       candidate = path.join(parent, path.basename(inputPath));
     } catch {
       return null;
+}
+
+/* ---------- Menu Diagnostic (accès rapide au fichier de log) ---------- */
+
+function setupDiagnosticMenu() {
+  try {
+    const template = [];
+    if (process.platform === "darwin") {
+      template.push({ role: "appMenu" });
     }
+    template.push(
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+      {
+        label: "Diagnostic",
+        submenu: [
+          {
+            label: "Ouvrir le journal de diagnostic",
+            accelerator: "CmdOrCtrl+Alt+D",
+            click: async () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Ouvrir le journal" });
+              try {
+                await shell.openPath(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu open failed", error: String(e) });
+              }
+            },
+          },
+          {
+            label: "Révéler le fichier dans le Finder / l'Explorateur",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Révéler" });
+              try {
+                shell.showItemInFolder(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu reveal failed", error: String(e) });
+              }
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Copier le chemin du fichier",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Copier chemin" });
+              try {
+                clipboard.writeText(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu copy failed", error: String(e) });
+              }
+            },
+          },
+          {
+            label: "Recharger la fenêtre",
+            accelerator: "CmdOrCtrl+R",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Reload" });
+              if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+            },
+          },
+          {
+            label: "Outils de développement",
+            accelerator: "CmdOrCtrl+Alt+I",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → DevTools" });
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.openDevTools({ mode: "detach" });
+              }
+            },
+          },
+        ],
+      },
+    );
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    diagWrite({ level: "info", message: "Diagnostic menu installé" });
+  } catch (e) {
+    diagWrite({ level: "error", message: "setupDiagnosticMenu failed", error: String(e) });
+  }
+}
   }
   for (const root of allowedRoots) {
     const rel = path.relative(root, candidate);
