@@ -2,6 +2,7 @@ import type { Project, ProjectDraft, ScannedProject, UUID } from "@/core/types";
 import { storage, STORAGE_KEYS } from "@/core/storage";
 import { JournalService } from "@/core/journal/logger";
 import { bridge } from "@/core/bridge";
+import { diag, diagOp } from "@/core/diag/logger";
 
 function uuid(): UUID {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
