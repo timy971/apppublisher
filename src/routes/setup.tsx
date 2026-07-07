@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check, FolderOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppStore } from "@/core/store/app-store";
 import { ProjectsService } from "@/core/projects/service";
 import type { ProjectDraft } from "@/core/types";
+import { diag } from "@/core/diag/logger";
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
