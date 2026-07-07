@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check, FolderOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppStore } from "@/core/store/app-store";
 import { ProjectsService } from "@/core/projects/service";
 import type { ProjectDraft } from "@/core/types";
+import { diag } from "@/core/diag/logger";
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
@@ -21,19 +22,41 @@ function SetupWizard() {
   const [detected, setDetected] = useState<ProjectDraft | null>(null);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    diag("wizard", "mount");
+    return () => diag("wizard", "unmount");
+  }, []);
+
+  useEffect(() => {
+    diag("wizard", "step:changed", { step });
+  }, [step]);
+
+  function go(next: Step, reason: string) {
+    diag("wizard", "setStep", { from: step, to: next, reason });
+    setStep(next);
+  }
+
   async function runDetection() {
-    if (!projectPath.trim()) return;
+    diag("wizard", "click:detect", { projectPath });
+    if (!projectPath.trim()) {
+      diag("wizard", "detect:skip:emptyPath");
+      return;
+    }
     setDetecting(true);
     try {
       const draft = await ProjectsService.detectFromPath(projectPath.trim());
+      diag("wizard", "detect:draftReady", { name: draft.name });
       setDetected(draft);
-      setStep(2);
+      go(2, "detect:success");
+    } catch (e) {
+      diag("wizard", "detect:error", { error: String((e as Error)?.message ?? e) });
     } finally {
       setDetecting(false);
     }
   }
 
   function finish() {
+    diag("wizard", "click:finish", { hasDetected: !!detected, name });
     if (detected) {
       const project = ProjectsService.save(detected);
       AppStore.refreshProjects();
@@ -43,10 +66,12 @@ function SetupWizard() {
       userName: name.trim() || "vous",
       onboardingCompleted: true,
     });
+    diag("wizard", "navigate:home");
     navigate({ to: "/" });
   }
 
   function skipProject() {
+    diag("wizard", "click:skipProject");
     AppStore.updateSettings({
       userName: name.trim() || "vous",
       onboardingCompleted: true,
@@ -76,7 +101,7 @@ function SetupWizard() {
               subtitle="AppPublisher va vous accompagner pour publier vos applications Android sans jamais retenir une seule commande."
               icon={<Sparkles className="h-6 w-6" />}
             >
-              <Button size="lg" onClick={() => setStep(1)}>
+              <Button size="lg" onClick={() => { diag("wizard", "click:commencer"); go(1, "click:commencer"); }}>
                 Commencer
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -95,12 +120,12 @@ function SetupWizard() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-12 text-base"
-                  onKeyDown={(e) => e.key === "Enter" && name.trim() && setStep(2)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { diag("wizard", "keydown:Enter:name"); go(2, "enter:name"); } }}
                 />
                 <div className="flex justify-end">
                   <Button
                     size="lg"
-                    onClick={() => setStep(2)}
+                    onClick={() => { diag("wizard", "click:continuer:name", { name }); go(2, "click:continuer:name"); }}
                     disabled={!name.trim()}
                   >
                     Continuer
@@ -174,10 +199,10 @@ function SetupWizard() {
               </div>
 
               <div className="mt-6 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDetected(null)}>
+                <Button variant="outline" onClick={() => { diag("wizard", "click:autreDossier"); setDetected(null); }}>
                   Choisir un autre dossier
                 </Button>
-                <Button size="lg" onClick={() => setStep(3)}>
+                <Button size="lg" onClick={() => { diag("wizard", "click:continuer:detected"); go(3, "click:continuer:detected"); }}>
                   Continuer
                   <ArrowRight className="h-4 w-4" />
                 </Button>

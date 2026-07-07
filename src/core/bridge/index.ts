@@ -1,6 +1,7 @@
 import type { SystemBridge } from "./types";
 import { electronBridge, hasElectronBridge } from "./electron";
 import { webBridge } from "./web";
+import { diag } from "@/core/diag/logger";
 
 /**
  * Sélection automatique du bridge. Le renderer ne connaît jamais l'implémentation.
@@ -11,7 +12,12 @@ let _bridge: SystemBridge | null = null;
 
 export function bridge(): SystemBridge {
   if (_bridge) return _bridge;
-  _bridge = hasElectronBridge() ? electronBridge : webBridge;
+  const isElectron = hasElectronBridge();
+  _bridge = isElectron ? electronBridge : webBridge;
+  diag("bridge:init", `Bridge sélectionné: ${_bridge.runtime}`, {
+    hasWindow: typeof window !== "undefined",
+    hasAppPublisher: typeof window !== "undefined" && !!(window as unknown as { appPublisher?: unknown }).appPublisher,
+  });
   return _bridge;
 }
 

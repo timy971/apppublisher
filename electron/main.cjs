@@ -19,7 +19,7 @@
  *  - Écritures disque confinées : `fs:writeText`, `fs:writeJson`,
  *    `fs:mkdir`, `fs:copyFile` — indispensables pour de vraies sauvegardes.
  */
-const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn, spawnSync } = require("child_process");
@@ -48,6 +48,145 @@ function bootstrapPath() {
   }
 }
 bootstrapPath();
+
+/* ---------- Diagnostic : journal fichier + watchdog + wrap IPC ---------- */
+/**
+ * Phase 3.7 — instrumentation.
+ * Aucune logique métier n'est modifiée ; seulement de l'observation.
+ *
+ *  - Journal fichier : <userData>/diagnostic.log (append-only).
+ *  - `diagWrite(entry)` : format horodaté, source, niveau, op, durée, ctx.
+ *  - Wrap de `ipcMain.handle` : chaque handler produit op:start/op:end
+ *    ou op:fail, avec durée exacte. Aucun handler existant à modifier.
+ *  - Réception des logs renderer/preload via `ipcMain.on("diag:log")`.
+ *  - Watchdog toutes les 2 s : signale toute opération main >2 s.
+ */
+
+const DIAG_LOG_PATH = path.join(app.getPath("userData"), "diagnostic.log");
+try {
+  fs.mkdirSync(path.dirname(DIAG_LOG_PATH), { recursive: true });
+  fs.appendFileSync(
+    DIAG_LOG_PATH,
+    `\n=== AppPublisher diagnostic session ${new Date().toISOString()} ` +
+      `(pid ${process.pid}, ${process.platform}, node ${process.versions.node}, ` +
+      `electron ${process.versions.electron}) ===\n`,
+    "utf8",
+  );
+} catch {}
+
+function _safeJSON(v) {
+  try {
+    return JSON.stringify(v, (_k, val) =>
+      typeof val === "string" && val.length > 500 ? val.slice(0, 500) + "…" : val,
+    );
+  } catch {
+    return String(v);
+  }
+}
+
+function diagWrite(entry) {
+  try {
+    const ts = entry.ts || new Date().toISOString();
+    const src = entry.source || "main";
+    const lvl = entry.level || "info";
+    const op = entry.opId ? ` op=${entry.opId}` : "";
+    const dur = typeof entry.durationMs === "number" ? ` dur=${entry.durationMs}ms` : "";
+    const err = entry.error ? ` err=${_safeJSON(entry.error)}` : "";
+    const extra =
+      entry.ctx !== undefined
+        ? " ctx=" + _safeJSON(entry.ctx)
+        : entry.args !== undefined
+          ? " args=" + _safeJSON(entry.args)
+          : "";
+    const line = `[${ts}] [${src}] [${lvl}]${op}${dur} ${entry.message || ""}${extra}${err}\n`;
+    fs.appendFileSync(DIAG_LOG_PATH, line, "utf8");
+    // Console main : utile en electron:dev.
+    if (isDev) process.stdout.write(line);
+  } catch {}
+}
+
+const _pendingMainOps = new Map();
+let _mainOpSeq = 0;
+
+function diagStart(name, ctx) {
+  const opId = `m${++_mainOpSeq}`;
+  _pendingMainOps.set(opId, { name, started: Date.now() });
+  diagWrite({ level: "op:start", message: name, opId, ctx });
+  return opId;
+}
+
+function diagEnd(opId, name, ctx) {
+  const op = _pendingMainOps.get(opId);
+  const durationMs = op ? Date.now() - op.started : undefined;
+  _pendingMainOps.delete(opId);
+  diagWrite({ level: "op:end", message: name, opId, durationMs, ctx });
+}
+
+function diagFail(opId, name, error) {
+  const op = _pendingMainOps.get(opId);
+  const durationMs = op ? Date.now() - op.started : undefined;
+  _pendingMainOps.delete(opId);
+  diagWrite({ level: "op:fail", message: name, opId, durationMs, error });
+}
+
+const _watchdog = setInterval(() => {
+  const now = Date.now();
+  for (const [opId, { name, started }] of _pendingMainOps) {
+    const age = now - started;
+    if (age > 2000) {
+      diagWrite({
+        level: "watchdog",
+        message: `main op '${name}' bloquée depuis ${Math.round(age / 1000)}s`,
+        opId,
+      });
+    }
+  }
+}, 2000);
+if (_watchdog.unref) _watchdog.unref();
+
+/* Wrap ipcMain.handle : chaque handler existant est automatiquement tracé. */
+const _origHandle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, fn) => {
+  _origHandle(channel, async (event, ...args) => {
+    const opId = diagStart(`ipc:${channel}`, { args });
+    try {
+      const res = await fn(event, ...args);
+      diagEnd(opId, `ipc:${channel}`, { returned: typeof res });
+      return res;
+    } catch (e) {
+      diagFail(opId, `ipc:${channel}`, e?.message ?? String(e));
+      throw e;
+    }
+  });
+};
+
+/* Réception des logs renderer/preload — non wrapé (send/on, pas invoke). */
+ipcMain.on("diag:log", (_e, entry) => {
+  if (entry && typeof entry === "object") {
+    diagWrite({ ...entry, source: entry.source || "renderer" });
+  }
+});
+
+/* IPC exposés au menu Diagnostic et aux composants de support. */
+ipcMain.handle("diag:getLogPath", () => DIAG_LOG_PATH);
+ipcMain.handle("diag:openLog", async () => {
+  try {
+    await shell.openPath(DIAG_LOG_PATH);
+  } catch (e) {
+    diagWrite({ level: "error", message: "diag:openLog failed", error: String(e) });
+  }
+  return DIAG_LOG_PATH;
+});
+ipcMain.handle("diag:revealLog", () => {
+  try {
+    shell.showItemInFolder(DIAG_LOG_PATH);
+  } catch (e) {
+    diagWrite({ level: "error", message: "diag:revealLog failed", error: String(e) });
+  }
+  return DIAG_LOG_PATH;
+});
+
+diagWrite({ level: "info", message: "diag ready", ctx: { path: DIAG_LOG_PATH } });
 
 /* ---------- Sécurité : racines projet approuvées ---------- */
 
@@ -78,7 +217,85 @@ function resolveWithinAllowed(inputPath) {
       candidate = path.join(parent, path.basename(inputPath));
     } catch {
       return null;
+}
+
+/* ---------- Menu Diagnostic (accès rapide au fichier de log) ---------- */
+
+function setupDiagnosticMenu() {
+  try {
+    const template = [];
+    if (process.platform === "darwin") {
+      template.push({ role: "appMenu" });
     }
+    template.push(
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+      {
+        label: "Diagnostic",
+        submenu: [
+          {
+            label: "Ouvrir le journal de diagnostic",
+            accelerator: "CmdOrCtrl+Alt+D",
+            click: async () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Ouvrir le journal" });
+              try {
+                await shell.openPath(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu open failed", error: String(e) });
+              }
+            },
+          },
+          {
+            label: "Révéler le fichier dans le Finder / l'Explorateur",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Révéler" });
+              try {
+                shell.showItemInFolder(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu reveal failed", error: String(e) });
+              }
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Copier le chemin du fichier",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Copier chemin" });
+              try {
+                clipboard.writeText(DIAG_LOG_PATH);
+              } catch (e) {
+                diagWrite({ level: "error", message: "menu copy failed", error: String(e) });
+              }
+            },
+          },
+          {
+            label: "Recharger la fenêtre",
+            accelerator: "CmdOrCtrl+R",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → Reload" });
+              if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+            },
+          },
+          {
+            label: "Outils de développement",
+            accelerator: "CmdOrCtrl+Alt+I",
+            click: () => {
+              diagWrite({ level: "menu", message: "Diagnostic → DevTools" });
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.openDevTools({ mode: "detach" });
+              }
+            },
+          },
+        ],
+      },
+    );
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    diagWrite({ level: "info", message: "Diagnostic menu installé" });
+  } catch (e) {
+    diagWrite({ level: "error", message: "setupDiagnosticMenu failed", error: String(e) });
+  }
+}
   }
   for (const root of allowedRoots) {
     const rel = path.relative(root, candidate);
@@ -249,9 +466,12 @@ if (!gotSingleInstanceLock) {
 }
 
 app.whenReady().then(() => {
+  diagWrite({ level: "info", message: "app whenReady" });
   configureAboutPanel();
+  setupDiagnosticMenu();
   createWindow();
   app.on("activate", () => {
+    diagWrite({ level: "info", message: "app activate" });
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
