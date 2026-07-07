@@ -101,7 +101,7 @@ function SetupWizard() {
               subtitle="AppPublisher va vous accompagner pour publier vos applications Android sans jamais retenir une seule commande."
               icon={<Sparkles className="h-6 w-6" />}
             >
-              <Button size="lg" onClick={() => setStep(1)}>
+              <Button size="lg" onClick={() => { diag("wizard", "click:commencer"); go(1, "click:commencer"); }}>
                 Commencer
                 <ArrowRight className="h-4 w-4" />
               </Button>
