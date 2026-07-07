@@ -120,7 +120,7 @@ function SetupWizard() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-12 text-base"
-                  onKeyDown={(e) => e.key === "Enter" && name.trim() && setStep(2)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { diag("wizard", "keydown:Enter:name"); go(2, "enter:name"); } }}
                 />
                 <div className="flex justify-end">
                   <Button
