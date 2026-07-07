@@ -466,9 +466,12 @@ if (!gotSingleInstanceLock) {
 }
 
 app.whenReady().then(() => {
+  diagWrite({ level: "info", message: "app whenReady" });
   configureAboutPanel();
+  setupDiagnosticMenu();
   createWindow();
   app.on("activate", () => {
+    diagWrite({ level: "info", message: "app activate" });
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
