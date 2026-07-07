@@ -199,10 +199,10 @@ function SetupWizard() {
               </div>
 
               <div className="mt-6 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDetected(null)}>
+                <Button variant="outline" onClick={() => { diag("wizard", "click:autreDossier"); setDetected(null); }}>
                   Choisir un autre dossier
                 </Button>
-                <Button size="lg" onClick={() => setStep(3)}>
+                <Button size="lg" onClick={() => { diag("wizard", "click:continuer:detected"); go(3, "click:continuer:detected"); }}>
                   Continuer
                   <ArrowRight className="h-4 w-4" />
                 </Button>
