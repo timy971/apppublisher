@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ArrowRight, Bug, Check, Sparkles, Rocket, Eye, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -76,6 +77,7 @@ function VersionAssistant() {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [done, setDone] = useState<{ from: string; to: string; build: number } | null>(null);
   const [failure, setFailure] = useState<TranslatedError | null>(null);
+  const [customBuild, setCustomBuild] = useState<string>("");
 
   if (!project) return <NoProject />;
 
@@ -111,7 +113,15 @@ function VersionAssistant() {
             title: "Application de la nouvelle version",
             run: async () => {
               try {
-                appliedRef.current = await VersionService.apply(project, choice!);
+                const buildOverride =
+                  customBuild.trim() === "" ? undefined : Number(customBuild);
+                if (
+                  buildOverride !== undefined &&
+                  (!Number.isInteger(buildOverride) || buildOverride < 1)
+                ) {
+                  throw new Error("Le numéro de build doit être un entier positif.");
+                }
+                appliedRef.current = await VersionService.apply(project, choice!, buildOverride);
                 return { status: "success" };
               } catch (e) {
                 return {
@@ -227,7 +237,38 @@ function VersionAssistant() {
       </div>
 
       {!workflow && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <>
+          <div className="mb-5 rounded-xl border bg-card p-4 shadow-soft">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">Numéro de build Android</div>
+                <div className="text-xs text-muted-foreground">
+                  Laissez vide pour utiliser le prochain build automatiquement. Saisissez une valeur
+                  supérieure à celle déjà utilisée sur Google Play si nécessaire.
+                </div>
+              </div>
+              <div className="w-full sm:w-40">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder={String(project.currentBuild + 1)}
+                  value={customBuild}
+                  onChange={(e) => setCustomBuild(e.target.value)}
+                  aria-label="Numéro de build Android"
+                />
+              </div>
+            </div>
+            {customBuild.trim() !== "" && Number(customBuild) <= project.currentBuild && (
+              <p className="mt-2 text-xs text-destructive">
+                Ce build n'est pas supérieur au build connu dans AppPublisher. Google Play exige
+                toujours un versionCode supérieur à ceux déjà publiés.
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
           {CHOICES.map((c) => {
             const p = VersionService.preview(project, c.type);
             const Icon = c.icon;
@@ -254,7 +295,8 @@ function VersionAssistant() {
               </button>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {workflow && !failure && <WorkflowView workflow={workflow} />}
@@ -279,6 +321,9 @@ function VersionAssistant() {
               La version passera de{" "}
               <strong className="tabular-nums">{preview?.from}</strong> à{" "}
               <strong className="tabular-nums">{preview?.to}</strong>. Cette opération met à jour votre projet.
+              {customBuild.trim() !== "" && (
+                <> Le build Android sera forcé à <strong>{customBuild}</strong>.</>
+              )}
               {settings.autoBackupEnabled && " Une sauvegarde sera automatiquement créée."}
             </AlertDialogDescription>
           </AlertDialogHeader>
