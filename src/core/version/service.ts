@@ -64,6 +64,7 @@ export const VersionService = {
   async apply(
     project: Project,
     type: VersionChangeType,
+    buildOverride?: number,
     onLine?: (line: string) => void,
   ): Promise<{ version: string; build: number }> {
     const b = bridge();
@@ -73,17 +74,24 @@ export const VersionService = {
     }
     const scriptArg =
       type === "bugfix" ? "patch" : type === "feature" ? "minor" : "major";
+    const args = ["scripts/version.mjs", scriptArg];
+    if (buildOverride !== undefined) {
+      if (!Number.isInteger(buildOverride) || buildOverride < 1) {
+        throw new Error("Le numéro de build doit être un entier positif.");
+      }
+      args.push("--build", String(buildOverride));
+    }
     const result = await b.exec.run(
       {
         cmd: "node",
-        args: ["scripts/version.mjs", scriptArg],
+        args,
         cwd: project.localPath,
         timeoutMs: 60_000,
       },
       onLine ? (l) => onLine(l.line) : undefined,
     );
     JournalService.logCommand({
-      command: `node scripts/version.mjs ${scriptArg}`,
+      command: `node scripts/version.mjs ${scriptArg}${buildOverride !== undefined ? ` --build ${buildOverride}` : ""}`,
       cwd: project.localPath,
       durationMs: result.durationMs,
       exitCode: result.exitCode,
